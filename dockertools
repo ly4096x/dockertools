@@ -1,0 +1,25 @@
+#!/bin/bash
+
+case $1 in
+  update-images)
+    IMG_LIST=`docker images -f "dangling=false" --format "{{.Repository}}:{{.Tag}}"`
+    for IMG in `echo $IMG_LIST`; do
+      repo_digest=`docker inspect $IMG --format '{{.RepoDigests}}'`
+      if [[ "$repo_digest" != "[]" ]]; then
+        echo -e "\033[0;32mUpdating $IMG ...\033[0m"
+        docker pull $IMG
+      fi
+    done
+    ;;
+  remove-none-images)
+    IMG_LIST=`docker images -f "dangling=true" -q`
+    if [[ "$IMG_LIST" != "" ]]; then
+      docker rmi $IMG_LIST
+    else
+      echo -e "\033[0;32mNo none images\033[0m"
+    fi
+    ;;
+  *)
+    echo -e "Supported commands:\n\nupdate-images\nremove-none-images"
+    ;;
+esac
