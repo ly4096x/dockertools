@@ -4,6 +4,7 @@ case $1 in
   update-images)
     IMG_LIST=`docker images -f "dangling=false" --format "{{.Repository}}:{{.Tag}}"`
     for IMG in `echo $IMG_LIST`; do
+      if echo $IMG |grep '<none>' > /dev/null ; then continue ; fi
       repo_digest=`docker inspect $IMG --format '{{.RepoDigests}}'`
       if [[ "$repo_digest" != "[]" ]]; then
         echo -e "\033[0;32mUpdating $IMG ...\033[0m"
