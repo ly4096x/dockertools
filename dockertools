@@ -7,7 +7,7 @@ case $1 in
       if echo $IMG |grep '<none>' > /dev/null ; then continue ; fi
       repo_digest=`docker inspect $IMG --format '{{.RepoDigests}}'`
       if [[ "$repo_digest" != "[]" ]]; then
-        echo -e "\033[0;32mUpdating $IMG ...\033[0m"
+        echo -e "\033[32mUpdating $IMG ...\033[0m"
         docker pull $IMG
       fi
     done
@@ -17,10 +17,20 @@ case $1 in
     if [[ "$IMG_LIST" != "" ]]; then
       docker rmi $IMG_LIST
     else
-      echo -e "\033[0;32mNo none images\033[0m"
+      echo -e "\033[32mNo none images\033[0m"
+    fi
+    ;;
+  list-tags)
+    IMG=$2
+    echo -e "\033[32mFetching tags for $IMG ...\033[0m"
+    RESULT=`curl -s "https://registry.hub.docker.com/v2/repositories/library/$IMG/tags?page_size=100000"`
+    if [[ "$?" != "0" ]]; then
+      echo -e "\033[31mFailed to fetch\033[0m"
+    else
+      echo $RESULT |jq -r '.results[] | .name + " \u001b[36m[ " + (.images|map(.architecture)|join(" ")) + " ]\u001b[0m"'
     fi
     ;;
   *)
-    echo -e "Supported commands:\n\nupdate-images\nremove-none-images"
+    echo -e "Supported commands:\n\nupdate-images\nremove-none-images\nlist-tags <image name>"
     ;;
 esac
