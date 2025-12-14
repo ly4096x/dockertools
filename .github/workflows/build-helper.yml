@@ -8,13 +8,15 @@ on:
       - 'master'
     paths:
       - 'Dockerfile'
-      - '.github/workflows/build-helper.yml'
+      - '.github/workflows'
+      - '.github/actions'
   pull_request:
     branches:
       - 'master'
     paths:
       - 'Dockerfile'
-      - '.github/workflows/build-helper.yml'
+      - '.github/workflows'
+      - '.github/actions'
   workflow_dispatch:
 
 env:
