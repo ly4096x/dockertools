@@ -1,36 +1,166 @@
 #!/bin/bash
 
+update_images() {
+  IMG_LIST=`docker images -f "dangling=false" --format "{{.Repository}}:{{.Tag}}"`
+  for IMG in `echo $IMG_LIST`; do
+    if echo $IMG |grep '<none>' > /dev/null ; then continue ; fi
+    repo_digest=`docker inspect $IMG --format '{{.RepoDigests}}'`
+    if [[ "$repo_digest" != "[]" ]]; then
+      echo -e "\033[32mUpdating $IMG ...\033[0m"
+      docker pull $IMG
+    fi
+  done
+}
+
+remove_none_images() {
+  IMG_LIST=`docker images -f "dangling=true" -q`
+  if [[ "$IMG_LIST" != "" ]]; then
+    docker rmi $IMG_LIST
+  else
+    echo -e "\033[32mNo none images\033[0m"
+  fi
+}
+
+list_tags() {
+  IMG=$1
+  echo -e "\033[32mFetching tags for $IMG ...\033[0m"
+  RESULT=`curl -s "https://registry.hub.docker.com/v2/repositories/library/$IMG/tags?page_size=100000"`
+  if [[ "$?" != "0" ]]; then
+    echo -e "\033[31mFailed to fetch\033[0m"
+  else
+    echo $RESULT |jq -r '.results[] | .name + " \u001b[36m[ " + (.images|map(.architecture)|join(" ")) + " ]\u001b[0m"'
+  fi
+}
+
+snapshot_volumes() {
+  COMPRESS_PROG="zstd -T0"
+  ALL=false
+  DEST_DIR=""
+  VOLUMES=()
+  HELPER_IMAGE="ghcr.io/ly4096x/dockertools-helper:latest"
+
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -a|--all)
+        ALL=true
+        shift
+        ;;
+      -d|--destination-dir)
+        DEST_DIR="$2"
+        shift 2
+        ;;
+      --use-compress-program)
+        COMPRESS_PROG="$2"
+        shift 2
+        ;;
+      -*)
+        echo "Error: Unknown option $1"
+        exit 1
+        ;;
+      *)
+        VOLUMES+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$DEST_DIR" ]]; then
+    echo "Error: Destination directory -d/--destination-dir is required."
+    exit 1
+  fi
+
+  if [[ "$ALL" == "true" ]]; then
+    if [[ ${#VOLUMES[@]} -gt 0 ]]; then
+      echo "Error: Cannot specify volumes when using -a/--all."
+      exit 1
+    fi
+    VOLS_TO_BACKUP=$(docker volume ls -q)
+  else
+    if [[ ${#VOLUMES[@]} -eq 0 ]]; then
+      echo "Error: Usage is: snapshot-volumes -d <dir> <vol1> [vol2 ...] OR snapshot-volumes -d <dir> -a"
+      exit 1
+    fi
+    VOLS_TO_BACKUP="${VOLUMES[@]}"
+  fi
+
+  # Check helper image
+  if ! docker image inspect "$HELPER_IMAGE" > /dev/null 2>&1; then
+    echo "Pulling helper image $HELPER_IMAGE..."
+    docker pull "$HELPER_IMAGE"
+  fi
+
+  mkdir -p "$DEST_DIR"
+  # Resolve absolute path for binding
+  DEST_DIR_ABS=$(cd "$DEST_DIR" && pwd)
+
+  for VOL in $VOLS_TO_BACKUP; do
+    echo "Snapshotting volume: $VOL"
+    docker run --rm \
+      -v "$VOL":/source \
+      -v "$DEST_DIR_ABS":/backup \
+      "$HELPER_IMAGE" \
+      bash -c "bsdtar -c --use-compress-program '$COMPRESS_PROG' -f /backup/${VOL}.tar.zstd -C /source ."
+  done
+}
+
+print_volume_to_container_mappings() {
+  # Temporary file to store raw mappings
+  TMP_FILE=$(mktemp)
+
+  # Fetch all containers
+  CONTAINERS=$(docker ps -a --format "{{.Names}}")
+
+  for CONTAINER in $CONTAINERS; do
+    # Get volumes for this container
+    # Docker inspect returns a list of mounts. We filter for Type=volume
+    # We use a trick to print "VolumeName ContainerName"
+    docker inspect "$CONTAINER" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} '"$CONTAINER"'{{println}}{{end}}{{end}}' >> "$TMP_FILE"
+  done
+
+  if [[ ! -s "$TMP_FILE" ]]; then
+    rm "$TMP_FILE"
+    return
+  fi
+
+  # Calculate max length of volume name for alignment
+  MAX_LEN=0
+  while read -r VOL CONT; do
+    LEN=${#VOL}
+    if [[ $LEN -gt $MAX_LEN ]]; then
+      MAX_LEN=$LEN
+    fi
+  done < "$TMP_FILE"
+
+  # Print aligned
+  while read -r VOL CONT; do
+    printf "%-${MAX_LEN}s -> %s\n" "$VOL" "$CONT"
+  done < "$TMP_FILE"
+
+  rm "$TMP_FILE"
+}
+
 case $1 in
   update-images)
-    IMG_LIST=`docker images -f "dangling=false" --format "{{.Repository}}:{{.Tag}}"`
-    for IMG in `echo $IMG_LIST`; do
-      if echo $IMG |grep '<none>' > /dev/null ; then continue ; fi
-      repo_digest=`docker inspect $IMG --format '{{.RepoDigests}}'`
-      if [[ "$repo_digest" != "[]" ]]; then
-        echo -e "\033[32mUpdating $IMG ...\033[0m"
-        docker pull $IMG
-      fi
-    done
+    shift
+    update_images "$@"
     ;;
   remove-none-images)
-    IMG_LIST=`docker images -f "dangling=true" -q`
-    if [[ "$IMG_LIST" != "" ]]; then
-      docker rmi $IMG_LIST
-    else
-      echo -e "\033[32mNo none images\033[0m"
-    fi
+    shift
+    remove_none_images "$@"
     ;;
   list-tags)
-    IMG=$2
-    echo -e "\033[32mFetching tags for $IMG ...\033[0m"
-    RESULT=`curl -s "https://registry.hub.docker.com/v2/repositories/library/$IMG/tags?page_size=100000"`
-    if [[ "$?" != "0" ]]; then
-      echo -e "\033[31mFailed to fetch\033[0m"
-    else
-      echo $RESULT |jq -r '.results[] | .name + " \u001b[36m[ " + (.images|map(.architecture)|join(" ")) + " ]\u001b[0m"'
-    fi
+    shift
+    list_tags "$@"
+    ;;
+  snapshot-volumes)
+    shift
+    snapshot_volumes "$@"
+    ;;
+  print-volume-to-container-mappings)
+    shift
+    print_volume_to_container_mappings "$@"
     ;;
   *)
-    echo -e "Supported commands:\n\nupdate-images\nremove-none-images\nlist-tags <image name>"
+    echo -e "Supported commands:\n\nupdate-images\nremove-none-images\nlist-tags <image name>\nsnapshot-volumes -d <dest> [-a|--all|<vol1> <vol2> ...] [--use-compress-program <prog>]\nprint-volume-to-container-mappings"
     ;;
 esac
