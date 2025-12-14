@@ -4,14 +4,14 @@ on:
   schedule:
     - cron: '0 0 * * 0' # Weekly
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
     paths:
       - 'Dockerfile'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-helper
+  IMAGE_NAME: dockertools-helper
 
 jobs:
   build:
@@ -31,7 +31,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: check-if-base-image-updated
+        if: ${{ github.event_name == 'schedule' }}
+        name: check-if-base-image-updated
+        uses: ./.github/actions/check-if-base-image-updated
+        with:
+          package-tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - id: check-if-os-upgradable
+        if: ${{ github.event_name == 'schedule' && steps.check-if-base-image-updated.outputs.result == '0' }}
+        name: check-if-os-upgradable
+        uses: ./.github/actions/check-if-os-upgradable
+        with:
+          package-tag: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
       - name: Extract metadata (tags, labels) for Docker
+        if: ${{ steps.check-if-base-image-updated.outcome == 'skipped' || steps.check-if-base-image-updated.outputs.result != '0' || steps.check-if-os-upgradable.outputs.result != '0' }}
         id: meta
         uses: docker/metadata-action@v4
         with:
@@ -41,6 +56,7 @@ jobs:
             type=sha
 
       - name: Build and push Docker image
+        if: ${{ steps.check-if-base-image-updated.outcome == 'skipped' || steps.check-if-base-image-updated.outputs.result != '0' || steps.check-if-os-upgradable.outputs.result != '0' }}
         uses: docker/build-push-action@v4
         with:
           context: .

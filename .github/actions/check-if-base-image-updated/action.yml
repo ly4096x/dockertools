@@ -1,0 +1,19 @@
+name: 'check-if-base-image-updated'
+inputs:
+  package-tag:
+    required: true
+outputs:
+  result:
+    description: 'is-base-image-updated [true, false]'
+    value: ${{ steps.result-step.outputs.result }}
+
+# check if base image updated
+# check if package updated [ apk update ; apk -u list ] not empty
+runs:
+  using: 'composite'
+  steps:
+    - id: result-step
+      env:
+        package_tag: ${{ inputs.package-tag }}
+      run: python3 ${{ github.action_path }}/run.py Dockerfile
+      shell: bash
