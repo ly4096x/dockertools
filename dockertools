@@ -99,7 +99,7 @@ snapshot_volumes() {
       -v "$VOL":/source \
       -v "$DEST_DIR_ABS":/backup \
       "$HELPER_IMAGE" \
-      bash -c "bsdtar -c --use-compress-program '$COMPRESS_PROG' -f /backup/${VOL}.tar.zstd -C /source ."
+      bash -c "set -o pipefail; bsdtar -cf - -C /source . | $COMPRESS_PROG > /backup/${VOL}.tar.zstd"
   done
 }
 

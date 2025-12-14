@@ -57,7 +57,7 @@ elif [[ "$1" == "run" ]]; then
     if [[ "$ARGS" == *"command -v bash && command -v zstd && command -v bsdtar"* ]]; then
         echo "Simulating tools check in container..."
         exit 0 # Success for tool check
-    elif [[ "$ARGS" == *"bsdtar -c --use-compress-program"* ]]; then
+    elif [[ "$ARGS" == *"bsdtar -cf - -C /source . | "* ]]; then
         echo "Simulating bsdtar snapshot for volume..."
         exit 0 # Success for snapshot
     else
@@ -163,7 +163,7 @@ echo "v1 [ amd64 ]"
         # Check run command
         # Expected: run --rm -v vol1:/source -v ...:/backup ... bsdtar ...
         self.assertIn('run --rm -v vol1:/source', log)
-        self.assertIn("bsdtar -c --use-compress-program 'zstd -T0' -f /backup/vol1.tar.zstd -C /source .", log)
+        self.assertIn("bsdtar -cf - -C /source . | zstd -T0 > /backup/vol1.tar.zstd", log)
 
     def test_snapshot_volumes_multiple(self):
         dest_dir = os.path.join(self.test_dir, 'backup')
@@ -221,7 +221,7 @@ echo "v1 [ amd64 ]"
         with open(self.log_file, 'r') as f:
             log = f.read()
 
-        self.assertIn("bsdtar -c --use-compress-program 'gzip' -f /backup/vol1.tar.zstd", log)
+        self.assertIn("bsdtar -cf - -C /source . | gzip > /backup/vol1.tar.zstd", log)
 
     def test_snapshot_volumes_errors(self):
         # No dest
