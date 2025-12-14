@@ -40,6 +40,7 @@ elif [[ "$1" == "inspect" ]]; then
 elif [[ "$1" == "volume" && "$2" == "ls" ]]; then
     echo "vol1"
     echo "vol2"
+    echo "vol3"
 elif [[ "$1" == "images" ]]; then
     if [[ "$ARGS" == *"dangling=false"* ]]; then
         echo "myrepo:latest"
@@ -144,6 +145,7 @@ echo "v1 [ amd64 ]"
         # "vol1 -> container1"
         self.assertIn("vol1 -> container1", result.stdout)
         self.assertIn("vol2 -> container2", result.stdout)
+        self.assertIn("vol3 -> NONE", result.stdout)
 
     def test_snapshot_volumes_single(self):
         dest_dir = os.path.join(self.test_dir, 'backup')

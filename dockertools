@@ -104,8 +104,13 @@ snapshot_volumes() {
 }
 
 print_volume_to_container_mappings() {
-  # Temporary file to store raw mappings
-  TMP_FILE=$(mktemp)
+  # Temporary files
+  MAPPINGS_FILE=$(mktemp)
+  ALL_VOLUMES_FILE=$(mktemp)
+
+  # Fetch all volumes
+  # We assume docker volume ls --format '{{.Name}}' returns just the name
+  docker volume ls --format '{{.Name}}' | sort > "$ALL_VOLUMES_FILE"
 
   # Fetch all containers
   CONTAINERS=$(docker ps -a --format "{{.Names}}")
@@ -114,29 +119,41 @@ print_volume_to_container_mappings() {
     # Get volumes for this container
     # Docker inspect returns a list of mounts. We filter for Type=volume
     # We use a trick to print "VolumeName ContainerName"
-    docker inspect "$CONTAINER" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} '"$CONTAINER"'{{println}}{{end}}{{end}}' >> "$TMP_FILE"
+    docker inspect "$CONTAINER" --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} '"$CONTAINER"'{{println}}{{end}}{{end}}' >> "$MAPPINGS_FILE"
   done
 
-  if [[ ! -s "$TMP_FILE" ]]; then
-    rm "$TMP_FILE"
-    return
+  # Check if there are any volumes at all
+  if [[ ! -s "$ALL_VOLUMES_FILE" ]]; then
+     rm "$MAPPINGS_FILE" "$ALL_VOLUMES_FILE"
+     echo "No volumes found."
+     return
   fi
 
-  # Calculate max length of volume name for alignment
+  # Calculate max length of volume name for alignment from ALL volumes
   MAX_LEN=0
-  while read -r VOL CONT; do
+  while read -r VOL; do
     LEN=${#VOL}
     if [[ $LEN -gt $MAX_LEN ]]; then
       MAX_LEN=$LEN
     fi
-  done < "$TMP_FILE"
+  done < "$ALL_VOLUMES_FILE"
 
-  # Print aligned
-  while read -r VOL CONT; do
-    printf "%-${MAX_LEN}s -> %s\n" "$VOL" "$CONT"
-  done < "$TMP_FILE"
+  # Process
+  while read -r VOL; do
+    # Find containers for this volume in the mappings file
+    # grep might return multiple lines if multiple containers use the volume
+    CONTS=$(awk -v v="$VOL" '$1 == v {print $2}' "$MAPPINGS_FILE")
 
-  rm "$TMP_FILE"
+    if [[ -z "$CONTS" ]]; then
+      printf "%-${MAX_LEN}s -> NONE\n" "$VOL"
+    else
+      for CONT in $CONTS; do
+        printf "%-${MAX_LEN}s -> %s\n" "$VOL" "$CONT"
+      done
+    fi
+  done < "$ALL_VOLUMES_FILE"
+
+  rm "$MAPPINGS_FILE" "$ALL_VOLUMES_FILE"
 }
 
 case $1 in
