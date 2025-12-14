@@ -28,6 +28,12 @@ jobs:
       packages: write
 
     steps:
+      - id: get-time
+        run: |
+          tp=$(date -u +'%Y%m%d_%H%M%S')
+          echo "::set-output name=build-time::$tp"
+          echo Timestamp: $tp
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
