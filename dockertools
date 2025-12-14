@@ -91,7 +91,10 @@ snapshot_volumes() {
 
   mkdir -p "$DEST_DIR"
   # Resolve absolute path for binding
-  DEST_DIR_ABS=$(cd "$DEST_DIR" && pwd)
+  DEST_DIR_ABS=$(cd "$DEST_DIR" && pwd) || {
+    echo "Error: Failed to resolve absolute path for $DEST_DIR"
+    exit 1
+  }
 
   for VOL in $VOLS_TO_BACKUP; do
     echo "Snapshotting volume: $VOL"
