@@ -48,12 +48,17 @@ class TestIntegration(unittest.TestCase):
         expected_file = os.path.join(self.backup_dir, f"{self.volume_name}.tar.zstd")
         self.assertTrue(os.path.exists(expected_file), f"Backup file {expected_file} not created")
         
+        file_size = os.path.getsize(expected_file)
+        print(f"Backup file size: {file_size} bytes")
+        self.assertGreater(file_size, 0, "Backup file is empty")
+        
         # Verify content using the helper image itself (ensures bsdtar/zstd are working in the image)
+        # Use pipe for verification to be robust
         verify_cmd = [
             "docker", "run", "--rm", 
             "-v", f"{self.backup_dir}:/backup",
             "ghcr.io/ly4096x/dockertools-helper:latest",
-            "bsdtar", "-tf", f"/backup/{self.volume_name}.tar.zstd", "--use-compress-program", "zstd"
+            "sh", "-c", f"zstd -dc /backup/{self.volume_name}.tar.zstd | bsdtar -tf -"
         ]
         
         print("Verifying backup content...")
