@@ -178,6 +178,6 @@ case $1 in
     print_volume_to_container_mappings "$@"
     ;;
   *)
-    echo -e "Supported commands:\n\nupdate-images\nremove-none-images\nlist-tags <image name>\nsnapshot-volumes -d <dest> [-a|--all|<vol1> <vol2> ...] [--use-compress-program <prog>]\nprint-volume-to-container-mappings"
+    echo -e "Supported commands:\n\nupdate-images\nremove-none-images\nlist-tags <image name>\nsnapshot-volumes [--use-compress-program '...'] <vol1 vol2 ...>|<-a|--all> <-d|--destination-dir /path/to/backup>\nprint-volume-to-container-mappings"
     ;;
 esac
